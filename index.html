@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Éditeur d'Image Avancé</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* BASE DES ÉLÉMENTS */
+        .mask, .label-item {
+            position: absolute;
+            z-index: 10;
+            user-select: none;
+            /* CRUCIAL : Définit l'origine en haut à gauche pour des rotations et des exports parfaits */
+            transform-origin: top left; 
+        }
+        
+        .mask {
+            background-color: white;
+            border: 1px dashed #cbd5e1;
+            overflow: visible;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.05);
+            min-width: 20px;
+            min-height: 20px;
+        }
+        .mask.circle { border-radius: 50%; }
+        
+        /* CONSIGNES STRICTES : INVISIBILITÉ DES CASES DE FLÈCHES */
+        .mask.arrow-container { 
+            background-color: transparent !important; 
+            border: 1px dashed transparent !important; 
+            box-shadow: none !important; /* Force la disparition totale des ombres */
+            z-index: 25; 
+        }
+        .mask.arrow-container:hover { 
+            border-color: #94a3b8 !important; 
+            background-color: rgba(255,255,255,0.4) !important; 
+        }
+        
+        /* POIGNÉE DE REDIMENSIONNEMENT SUR MESURE (ALLONGER) */
+        .custom-resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 24px;
+            height: 24px;
+            cursor: se-resize;
+            z-index: 45;
+            opacity: 0;
+            pointer-events: none; /* Ne bloque pas les clics quand invisible */
+            transition: opacity 0.2s;
+        }
+        .mask:hover .custom-resize-handle { 
+            opacity: 1; 
+            pointer-events: auto; 
+        }
+        .custom-resize-handle::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 10px;
+            height: 10px;
+            border-right: 3px solid #3b82f6;
+            border-bottom: 3px solid #3b82f6;
+        }
+
+        /* POIGNÉE DE ROTATION FLUIDE */
+        .rotate-handle {
+            position: absolute;
+            top: -35px;
+            left: 10px;
+            width: 28px;
+            height: 28px;
+            background: #3b82f6;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            cursor: grab;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 40;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .rotate-handle::before {
+            content: ''; position: absolute; bottom: -20px; left: -10px; width: 48px; height: 25px; background: transparent;
+        }
+        .rotate-handle:active { cursor: grabbing; background: #2563eb; }
+        .mask:hover .rotate-handle, .label-item:hover .rotate-handle { opacity: 1; pointer-events: auto; }
+        .rotate-handle::after {
+            content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); width: 2px; height: 12px; background: #3b82f6; pointer-events: none;
+        }
+
+        /* OPTIONS EN BAS DE L'ÉLÉMENT */
+        .element-controls {
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0;
+            display: none;
+            gap: 4px;
+            background: white;
+            padding: 4px;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border: 1px solid #e2e8f0;
+            z-index: 40;
+            white-space: nowrap;
+        }
+        .element-controls::before {
+            content: ''; position: absolute; top: -15px; left: 0; width: 100%; height: 15px; background: transparent;
+        }
+        .mask:hover .element-controls, .label-item:hover .element-controls { display: flex; }
+        
+        .control-btn {
+            font-size: 12px; padding: 4px 8px; color: white; cursor: pointer; border-radius: 4px; font-weight: bold; display: flex; align-items: center; justify-content: center;
+        }
+        .control-btn:hover { filter: brightness(1.1); }
+
+        /* TEXTE */
+        .label-item { z-index: 25; }
+        .text-content {
+            font-family: Arial, sans-serif; font-weight: bold; color: #000; padding: 8px; border: 1px dashed transparent; border-radius: 4px; display: inline-block; min-width: 50px; min-height: 24px; white-space: nowrap; outline: none; cursor: text;
+        }
+        .label-item:hover .text-content { border-color: #10b981; background-color: rgba(255,255,255,0.8); }
+        
+        .text-drag-handle {
+            position: absolute; left: -32px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; background: #cbd5e1; color: #334155; border-radius: 4px; cursor: grab; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .text-drag-handle:active { cursor: grabbing; background: #94a3b8; }
+        .text-drag-handle svg { width: 18px; height: 18px; pointer-events: none; }
+        .label-item:hover .text-drag-handle, .text-content:focus + .text-drag-handle, .label-item:focus-within .text-drag-handle { opacity: 1; pointer-events: auto; }
+
+        /* Pinceaux */
+        #drawing-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 15; pointer-events: none; }
+        #temp-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; cursor: crosshair; }
+        .brush-active #temp-layer { pointer-events: auto; }
+        .brush-active .mask, .brush-active .label-item { pointer-events: none; }
+
+        #workspace-container {
+            position: relative; display: inline-block; max-width: 100%; border: 1px solid #e2e8f0; background-color: #fff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        #source-image { max-width: 100%; height: auto; display: block; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto">
+        <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+            <h1 class="text-2xl font-bold text-slate-800 mb-2">Éditeur et Simplificateur d'Image</h1>
+            <p class="text-slate-600 mb-4">
+                Chargez une image vierge. Vous pouvez dessiner des caches blancs, effacer vos erreurs, ajouter du texte, des lignes/flèches et utiliser l'IA de manière professionnelle.
+            </p>
+            
+            <div class="flex flex-wrap gap-4 items-center mb-4 border-b pb-4">
+                <div>
+                    <label for="imageLoader" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors">
+                        1. Charger une image
+                    </label>
+                    <input type="file" id="imageLoader" accept="image/*" class="hidden">
+                </div>
+                <button id="downloadBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded transition-colors opacity-50 cursor-not-allowed" disabled>
+                    2. Télécharger l'image modifiée
+                </button>
+            </div>
+            
+            <div id="tools-container" class="mb-4 border-b pb-4 hidden">
+                <div class="flex flex-wrap gap-3 mb-3">
+                    <button id="addRectBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-medium py-1 px-3 rounded text-sm">+ Cache Carré</button>
+                    <button id="addCircleBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-medium py-1 px-3 rounded text-sm">+ Cache Rond</button>
+                    <button id="addTextBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-3 rounded text-sm font-bold">+ Texte (T)</button>
+                    <div class="border-l border-slate-300 mx-1"></div>
+                    
+                    <button id="addLineBtn" class="bg-sky-600 hover:bg-sky-700 text-white font-medium py-1 px-3 rounded text-sm">+ Ligne Simple</button>
+                    <button id="addArrStBtn" class="bg-sky-600 hover:bg-sky-700 text-white font-medium py-1 px-3 rounded text-sm">+ Flèche Droite</button>
+                    <button id="addDoubleArrBtn" class="bg-sky-600 hover:bg-sky-700 text-white font-medium py-1 px-3 rounded text-sm">+ Flèche Double</button>
+                    <button id="addArrCuBtn" class="bg-sky-600 hover:bg-sky-700 text-white font-medium py-1 px-3 rounded text-sm">+ Flèche Courbe</button>
+                    <button id="addArrFrBtn" class="bg-sky-600 hover:bg-sky-700 text-white font-medium py-1 px-3 rounded text-sm transition-all">✏️ Flèche Dessin</button>
+                </div>
+                <div class="flex flex-wrap gap-3 items-center bg-slate-100 p-2 rounded">
+                    <span class="text-sm font-bold text-slate-700">Pinceau Libre :</span>
+                    <button id="btnBrushDraw" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-1 px-3 rounded text-sm transition-all">
+                        🖌️ Peindre (Blanc)
+                    </button>
+                    <button id="btnBrushErase" class="bg-pink-600 hover:bg-pink-700 text-white font-medium py-1 px-3 rounded text-sm transition-all">
+                        🧹 Gomme (Effacer pinceau)
+                    </button>
+                    <button id="btnClearBrush" class="bg-red-500 hover:bg-red-600 text-white font-medium py-1 px-3 rounded text-sm hidden">
+                        🗑️ Vider le pinceau
+                    </button>
+                </div>
+            </div>
+
+            <div id="ai-container" class="mb-4 border-b pb-4 hidden">
+                <h3 class="text-lg font-bold text-slate-800 mb-2">✨ Assistant IA - Corrections Chirurgicales (Inpainting Strict)</h3>
+                <p class="text-sm text-slate-600 mb-2">L'IA est configurée avec des verrous de sécurité. Elle effacera <strong>strictement et uniquement</strong> ce que vous demandez. Le reste de l'image (lignes, textures) et vos coups de pinceau resteront 100% intacts.</p>
+                <div class="flex flex-wrap gap-2">
+                    <input type="text" id="aiPrompt" placeholder="Ex: Efface la pointe de la flèche qui passe en avant plan de l'image..." class="flex-1 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <button id="applyAiBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded text-sm flex items-center transition-all">
+                        <span id="aiBtnText">Appliquer l'IA</span>
+                        <svg id="aiLoading" class="animate-spin ml-2 h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    </button>
+                </div>
+                <p id="aiError" class="text-red-500 text-xs mt-1 hidden"></p>
+            </div>
+            
+            <p class="text-sm text-slate-500 mb-2 italic">
+                Rappel : Les cadres autour des flèches disparaissent complètement dès que votre souris s'éloigne. Le résultat visuel sera parfait !
+            </p>
+        </div>
+
+        <div id="workspace-wrapper" class="overflow-auto text-center hidden">
+            <div id="workspace-container">
+                <img id="source-image" src="" alt="Image source">
+                <canvas id="drawing-layer"></canvas>
+                <canvas id="temp-layer"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const imageLoader = document.getElementById('imageLoader');
+        const sourceImage = document.getElementById('source-image');
+        const workspaceContainer = document.getElementById('workspace-container');
+        const workspaceWrapper = document.getElementById('workspace-wrapper');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const toolsContainer = document.getElementById('tools-container');
+        const aiContainer = document.getElementById('ai-container');
+
+        const drawingLayer = document.getElementById('drawing-layer');
+        const dCtx = drawingLayer.getContext('2d');
+        const tempLayer = document.getElementById('temp-layer');
+        const tCtx = tempLayer.getContext('2d');
+        
+        let brushMode = 'none'; 
+        let isDrawing = false;
+        let arrowPoints = [];
+
+        imageLoader.addEventListener('change', (e) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                sourceImage.onload = () => {
+                    workspaceWrapper.classList.remove('hidden');
+                    toolsContainer.classList.remove('hidden');
+                    aiContainer.classList.remove('hidden');
+                    downloadBtn.disabled = false;
+                    downloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    document.querySelectorAll('.mask, .label-item').forEach(el => el.remove());
+                    syncDrawingLayer();
+                }
+                sourceImage.src = event.target.result;
+            }
+            if(e.target.files[0]) reader.readAsDataURL(e.target.files[0]);
+        });
+
+        // --- ROTATION PARFAITE (AUTOUR DU POINT SUPÉRIEUR GAUCHE) ---
+        function makeRotatable(element, handle) {
+            let isRotating = false;
+            let startAngle = 0;
+            let initialRotation = 0;
+
+            handle.onmousedown = (e) => {
+                e.stopPropagation(); e.preventDefault();
+                isRotating = true;
+                
+                const containerRect = workspaceContainer.getBoundingClientRect();
+                const originX = containerRect.left + (parseFloat(element.style.left) / 100) * containerRect.width;
+                const originY = containerRect.top + (parseFloat(element.style.top) / 100) * containerRect.height;
+                
+                startAngle = Math.atan2(e.clientY - originY, e.clientX - originX) * (180 / Math.PI);
+                initialRotation = parseFloat(element.dataset.rotation || 0);
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            };
+
+            function onMouseMove(e) {
+                if (!isRotating) return;
+                const containerRect = workspaceContainer.getBoundingClientRect();
+                const originX = containerRect.left + (parseFloat(element.style.left) / 100) * containerRect.width;
+                const originY = containerRect.top + (parseFloat(element.style.top) / 100) * containerRect.height;
+                
+                const currentAngle = Math.atan2(e.clientY - originY, e.clientX - originX) * (180 / Math.PI);
+                let newRotation = (initialRotation + (currentAngle - startAngle)) % 360;
+                
+                element.dataset.rotation = newRotation;
+                element.style.transform = `rotate(${newRotation}deg)`;
+            }
+
+            function onMouseUp() {
+                isRotating = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+        }
+
+        // --- ALLONGEMENT FLUIDE MATHÉMATIQUE (DÉ-ROTATION DU CURSEUR) ---
+        function makeResizable(element, handle) {
+            let startX, startY, startW, startH;
+            
+            handle.onmousedown = (e) => {
+                e.stopPropagation(); e.preventDefault();
+                startX = e.clientX; startY = e.clientY;
+                startW = element.offsetWidth; startH = element.offsetHeight;
+                
+                const rotation = parseFloat(element.dataset.rotation || 0);
+                const rad = rotation * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+
+                document.onmousemove = (ev) => {
+                    const dx = ev.clientX - startX;
+                    const dy = ev.clientY - startY;
+                    
+                    const uDx = dx * cos + dy * sin;
+                    const uDy = -dx * sin + dy * cos;
+                    
+                    element.style.width = Math.max(20, startW + uDx) + 'px';
+                    element.style.height = Math.max(20, startH + uDy) + 'px';
+                };
+                
+                document.onmouseup = () => { document.onmousemove = null; document.onmouseup = null; };
+            };
+        }
+
+        function addResizeHandle(el) {
+            const handle = document.createElement('div');
+            handle.className = 'custom-resize-handle';
+            handle.title = "Glisser pour allonger / redimensionner";
+            el.appendChild(handle);
+            makeResizable(el, handle);
+        }
+
+        function addRotateHandle(el) {
+            const rotHandle = document.createElement('div');
+            rotHandle.className = 'rotate-handle';
+            rotHandle.innerHTML = '↻';
+            rotHandle.title = "Maintenir pour pivoter";
+            el.appendChild(rotHandle);
+            makeRotatable(el, rotHandle);
+        }
+
+        // --- DÉPLACEMENT ANTI-SAUT ---
+        function makeDraggable(element, isMask) {
+            let startX = 0, startY = 0, startLeftPct = 0, startTopPct = 0;
+            element.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                if (e.target.closest('.element-controls') || e.target.closest('.rotate-handle') || e.target.closest('.custom-resize-handle')) return;
+                if (!isMask && !e.target.closest('.text-drag-handle')) return;
+
+                if (isMask) {
+                    const rect = element.getBoundingClientRect();
+                    const resizeHandleSize = 15;
+                    if (e.clientX > rect.right - resizeHandleSize && e.clientY > rect.bottom - resizeHandleSize) return; 
+                }
+                
+                e.preventDefault();
+                startX = e.clientX; startY = e.clientY;
+                startLeftPct = parseFloat(element.style.left) || 0;
+                startTopPct = parseFloat(element.style.top) || 0;
+                
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+            }
+
+            function elementDrag(e) {
+                e.preventDefault();
+                const dx = e.clientX - startX; const dy = e.clientY - startY;
+                const containerRect = workspaceContainer.getBoundingClientRect();
+                element.style.left = startLeftPct + (dx / containerRect.width) * 100 + "%";
+                element.style.top = startTopPct + (dy / containerRect.height) * 100 + "%";
+            }
+            function closeDragElement() { document.onmouseup = null; document.onmousemove = null; }
+        }
+
+        // --- CONTRÔLES (SUPPRIMER, ÉPAISSEUR) ---
+        function createControls(el, type) {
+            const controls = document.createElement('div');
+            controls.className = 'element-controls';
+            
+            const btnDel = document.createElement('div');
+            btnDel.className = 'control-btn bg-red-500';
+            btnDel.innerText = '× Supprimer';
+            btnDel.onmousedown = (e) => { e.stopPropagation(); el.remove(); };
+            controls.appendChild(btnDel);
+
+            if (type === 'text') {
+                const btnPlus = document.createElement('div'); btnPlus.className = 'control-btn bg-slate-600'; btnPlus.innerText = 'Taille +';
+                const btnMinus = document.createElement('div'); btnMinus.className = 'control-btn bg-slate-600'; btnMinus.innerText = 'Taille -';
+                btnPlus.onmousedown = (e) => { e.stopPropagation(); const span = el.querySelector('.text-content'); span.style.fontSize = (parseInt(span.style.fontSize) + 4) + 'px'; };
+                btnMinus.onmousedown = (e) => { e.stopPropagation(); const span = el.querySelector('.text-content'); span.style.fontSize = Math.max(10, parseInt(span.style.fontSize) - 4) + 'px'; };
+                controls.append(btnPlus, btnMinus);
+            }
+
+            if (type === 'arrow') {
+                const createBtn = (label, bg, action) => {
+                    const btn = document.createElement('div'); btn.className = `control-btn ${bg}`; btn.innerText = label;
+                    btn.onmousedown = action; return btn;
+                };
+                controls.append(
+                    createBtn('Trait +', 'bg-slate-700', (e) => { e.stopPropagation(); el.dataset.strokeWidth = parseFloat(el.dataset.strokeWidth || 4) + 1; updateArrowSVG(el); }),
+                    createBtn('Trait -', 'bg-slate-700', (e) => { e.stopPropagation(); el.dataset.strokeWidth = Math.max(1, parseFloat(el.dataset.strokeWidth || 4) - 1); updateArrowSVG(el); }),
+                    createBtn('Pointe +', 'bg-indigo-600', (e) => { e.stopPropagation(); el.dataset.headSize = parseFloat(el.dataset.headSize || 6) + 1; updateArrowSVG(el); }),
+                    createBtn('Pointe -', 'bg-indigo-600', (e) => { e.stopPropagation(); el.dataset.headSize = Math.max(2, parseFloat(el.dataset.headSize || 6) - 1); updateArrowSVG(el); })
+                );
+            }
+            return controls;
+        }
+
+        // --- CACHES & TEXTES ---
+        document.getElementById('addRectBtn').onclick = () => {
+            const mask = document.createElement('div');
+            mask.className = 'mask'; mask.dataset.shape = 'rect'; mask.dataset.rotation = 0;
+            mask.style.top = '10%'; mask.style.left = '10%'; mask.style.width = '15%'; mask.style.height = '15%';
+            mask.appendChild(createControls(mask, 'mask')); addRotateHandle(mask); addResizeHandle(mask);
+            workspaceContainer.appendChild(mask); makeDraggable(mask, true);
+        };
+
+        document.getElementById('addCircleBtn').onclick = () => {
+            const mask = document.createElement('div');
+            mask.className = 'mask circle'; mask.dataset.shape = 'circle'; mask.dataset.rotation = 0;
+            mask.style.top = '10%'; mask.style.left = '10%'; mask.style.width = '15%'; mask.style.height = '15%';
+            mask.appendChild(createControls(mask, 'mask')); addRotateHandle(mask); addResizeHandle(mask);
+            workspaceContainer.appendChild(mask); makeDraggable(mask, true);
+        };
+
+        document.getElementById('addTextBtn').onclick = () => {
+            const label = document.createElement('div');
+            label.className = 'label-item'; label.dataset.rotation = 0;
+            label.style.top = '10%'; label.style.left = '10%';
+            
+            const span = document.createElement('span');
+            span.className = 'text-content'; span.innerText = "Écrire ici..."; span.style.fontSize = '24px'; span.contentEditable = "true";
+            span.onmousedown = (e) => e.stopPropagation();
+
+            const handle = document.createElement('div');
+            handle.className = 'text-drag-handle';
+            handle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"></polyline><polyline points="9 5 12 2 15 5"></polyline><polyline points="19 9 22 12 19 15"></polyline><polyline points="9 19 12 22 15 19"></polyline><line x1="2" y1="12" x2="22" y2="12"></line><line x1="12" y1="2" x2="12" y2="22"></line></svg>`;
+            
+            label.appendChild(span); label.appendChild(handle);
+            label.appendChild(createControls(label, 'text')); addRotateHandle(label);
+            workspaceContainer.appendChild(label); makeDraggable(label, false);
+        };
+
+        // --- FLÈCHES DYNAMIQUES ---
+        function updateArrowSVG(el) {
+            const type = el.dataset.arrowType;
+            if (!type) return;
+            const w = Math.max(20, el.offsetWidth);
+            const h = Math.max(20, el.offsetHeight);
+            const strokeW = parseFloat(el.dataset.strokeWidth || 4);
+            const headS = parseFloat(el.dataset.headSize || 6);
+            
+            const marker = `<marker id="head-${type}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="${headS}" markerHeight="${headS}" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="black" /></marker>`;
+            const markerRev = `<marker id="head-rev-${type}" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="${headS}" markerHeight="${headS}" orient="auto"><path d="M 10 0 L 0 5 L 10 10 z" fill="black" /></marker>`;
+            let defs = `<defs>${marker}${markerRev}</defs>`;
+            
+            let svgContent = '';
+            if (type === 'line') {
+                svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${defs}<line x1="4" y1="${h/2}" x2="${w-4}" y2="${h/2}" stroke="black" stroke-width="${strokeW}" stroke-linecap="round"/></svg>`;
+            } else if (type === 'arrow') {
+                svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${defs}<line x1="4" y1="${h/2}" x2="${w-4}" y2="${h/2}" stroke="black" stroke-width="${strokeW}" stroke-linecap="round" marker-end="url(#head-${type})"/></svg>`;
+            } else if (type === 'double-arrow') {
+                svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${defs}<line x1="12" y1="${h/2}" x2="${w-12}" y2="${h/2}" stroke="black" stroke-width="${strokeW}" stroke-linecap="round" marker-start="url(#head-rev-${type})" marker-end="url(#head-${type})"/></svg>`;
+            } else if (type === 'curve') {
+                svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${defs}<path d="M 4,${h-4} Q ${w/2},4 ${w-4},${h/2}" fill="none" stroke="black" stroke-width="${strokeW}" stroke-linecap="round" marker-end="url(#head-${type})"/></svg>`;
+            } else if (type === 'freehand') {
+                const points = JSON.parse(el.dataset.points || '[]');
+                if (points.length > 0) {
+                    const pathD = points.map((p, i) => (i===0?'M':'L') + (p.nx * w) + ',' + (p.ny * h)).join(' ');
+                    svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${defs}<path d="${pathD}" fill="none" stroke="black" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#head-${type})"/></svg>`;
+                }
+            }
+
+            if (svgContent) {
+                const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgContent);
+                el.querySelector('img').src = dataUrl;
+            }
+        }
+
+        const arrowResizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) updateArrowSVG(entry.target);
+        });
+
+        function createDynamicArrow(type, w, h, topPct = 10, leftPct = 10, points = null) {
+            const mask = document.createElement('div');
+            mask.className = 'mask arrow-container';
+            mask.dataset.shape = 'image'; mask.dataset.arrowType = type; mask.dataset.rotation = 0;
+            mask.dataset.strokeWidth = 4; mask.dataset.headSize = 6;
+            mask.style.top = topPct + '%'; mask.style.left = leftPct + '%'; mask.style.width = w + 'px'; mask.style.height = h + 'px';
+            if (points) mask.dataset.points = JSON.stringify(points);
+            
+            const img = document.createElement('img');
+            img.style.width = '100%'; img.style.height = '100%'; img.style.pointerEvents = 'none';
+            
+            mask.appendChild(img); 
+            mask.appendChild(createControls(mask, 'arrow'));
+            addRotateHandle(mask); addResizeHandle(mask);
+            workspaceContainer.appendChild(mask); makeDraggable(mask, true);
+            
+            updateArrowSVG(mask);
+            arrowResizeObserver.observe(mask);
+        }
+
+        document.getElementById('addLineBtn').onclick = () => createDynamicArrow('line', 100, 40);
+        document.getElementById('addArrStBtn').onclick = () => createDynamicArrow('arrow', 100, 40);
+        document.getElementById('addDoubleArrBtn').onclick = () => createDynamicArrow('double-arrow', 100, 40);
+        document.getElementById('addArrCuBtn').onclick = () => createDynamicArrow('curve', 80, 80);
+        document.getElementById('addArrFrBtn').onclick = () => updateBrushMode('arrow');
+
+        // --- PINCEAU & GOMME ---
+        function syncDrawingLayer() {
+            const rect = sourceImage.getBoundingClientRect();
+            drawingLayer.width = rect.width; drawingLayer.height = rect.height;
+            tempLayer.width = rect.width; tempLayer.height = rect.height;
+        }
+
+        window.addEventListener('resize', () => {
+            if (!workspaceWrapper.classList.contains('hidden')) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = drawingLayer.width; tempCanvas.height = drawingLayer.height;
+                tempCanvas.getContext('2d').drawImage(drawingLayer, 0, 0);
+                syncDrawingLayer();
+                dCtx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, drawingLayer.width, drawingLayer.height);
+            }
+        });
+
+        function updateBrushMode(mode) {
+            brushMode = brushMode === mode ? 'none' : mode;
+            workspaceContainer.classList.toggle('brush-active', brushMode !== 'none');
+            document.getElementById('btnBrushDraw').classList.toggle('ring-4', brushMode === 'draw');
+            document.getElementById('btnBrushErase').classList.toggle('ring-4', brushMode === 'erase');
+            document.getElementById('addArrFrBtn').classList.toggle('ring-4', brushMode === 'arrow');
+            document.getElementById('btnClearBrush').classList.toggle('hidden', (brushMode === 'none' || brushMode === 'arrow'));
+            dCtx.globalCompositeOperation = brushMode === 'erase' ? 'destination-out' : 'source-over';
+        }
+
+        document.getElementById('btnBrushDraw').onclick = () => updateBrushMode('draw');
+        document.getElementById('btnBrushErase').onclick = () => updateBrushMode('erase');
+        document.getElementById('btnClearBrush').onclick = () => { dCtx.clearRect(0, 0, drawingLayer.width, drawingLayer.height); };
+
+        tempLayer.onmousedown = (e) => {
+            if (brushMode === 'none') return;
+            isDrawing = true;
+            if (brushMode === 'arrow') { arrowPoints = [{x: e.offsetX, y: e.offsetY}]; } 
+            else { dCtx.beginPath(); dCtx.moveTo(e.offsetX, e.offsetY); }
+        };
+        
+        tempLayer.onmousemove = (e) => {
+            if (!isDrawing || brushMode === 'none') return;
+            if (brushMode === 'arrow') {
+                arrowPoints.push({x: e.offsetX, y: e.offsetY});
+                tCtx.clearRect(0, 0, tempLayer.width, tempLayer.height);
+                tCtx.beginPath(); tCtx.moveTo(arrowPoints[0].x, arrowPoints[0].y);
+                for (let i = 1; i < arrowPoints.length; i++) tCtx.lineTo(arrowPoints[i].x, arrowPoints[i].y);
+                tCtx.strokeStyle = 'black'; tCtx.lineWidth = 4; tCtx.lineCap = 'round'; tCtx.lineJoin = 'round'; tCtx.stroke();
+            } else {
+                dCtx.lineTo(e.offsetX, e.offsetY);
+                dCtx.strokeStyle = brushMode === 'draw' ? 'white' : 'rgba(0,0,0,1)';
+                dCtx.lineWidth = 18; dCtx.lineCap = 'round'; dCtx.lineJoin = 'round'; dCtx.stroke();
+            }
+        };
+        
+        tempLayer.onmouseup = () => { 
+            if (!isDrawing) return;
+            isDrawing = false; 
+            if (brushMode === 'arrow') {
+                tCtx.clearRect(0, 0, tempLayer.width, tempLayer.height);
+                if (arrowPoints.length > 5) {
+                    let minX = Math.min(...arrowPoints.map(p => p.x)); let maxX = Math.max(...arrowPoints.map(p => p.x));
+                    let minY = Math.min(...arrowPoints.map(p => p.y)); let maxY = Math.max(...arrowPoints.map(p => p.y));
+                    let w = Math.max(maxX - minX + 20, 20); let h = Math.max(maxY - minY + 20, 20);
+                    let normalizedPoints = arrowPoints.map(p => ({ nx: (p.x - minX + 10) / w, ny: (p.y - minY + 10) / h }));
+                    
+                    const containerRect = workspaceContainer.getBoundingClientRect();
+                    const topPct = (minY - 10) / containerRect.height * 100;
+                    const leftPct = (minX - 10) / containerRect.width * 100;
+                    createDynamicArrow('freehand', w, h, topPct, leftPct, normalizedPoints);
+                }
+                updateBrushMode('none');
+            }
+        };
+        tempLayer.onmouseleave = tempLayer.onmouseup;
+
+        // --- ASSISTANT IA (AVEC CONSIGNES D'INPAINTING ULTRA-STRICTES) ---
+        async function callGeminiAPIWithRetry(userPrompt, base64Data) {
+            const apiKey = ""; 
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+            
+            // CONSIGNES STRICTES INTÉGRÉES AU PROMPT SYSTÈME DE L'IA POUR GARANTIR UNE PRÉCISION CHIRURGICALE
+            const structuredPrompt = `INSTRUCTION D'ÉDITION CHIRURGICALE (INPAINTING) :
+RÈGLE ABSOLUE NUMÉRO 1 : NE MODIFIE AUCUN PIXEL DE L'IMAGE en dehors de l'élément explicitement demandé. TOUT LE RESTE (textes, lignes, grain du bois, flèches, fond blanc) DOIT RESTER STRICTEMENT IDENTIQUE, SANS AUCUNE ALTÉRATION, RECOLORATION NI LISSAGE.
+
+Tâche : Efface UNIQUEMENT cet élément précis : "${userPrompt}".
+Remplace-le par la continuité naturelle du fond situé juste derrière lui. L'image de retour doit être un clone exact de l'image source, avec pour SEULE différence la suppression chirurgicale de l'élément demandé.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: structuredPrompt }, { inlineData: { mimeType: "image/png", data: base64Data } }] }],
+                generationConfig: { responseModalities: ["IMAGE"] }
+            };
+            
+            for (let i = 0; i < 4; i++) {
+                try {
+                    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (!response.ok) throw new Error('API Error');
+                    const result = await response.json();
+                    return `data:image/png;base64,${result.candidates[0].content.parts.find(p => p.inlineData).inlineData.data}`;
+                } catch (error) { if (i === 3) throw error; await new Promise(r => setTimeout(r, [1000, 2000, 4000][i])); }
+            }
+        }
+
+        document.getElementById('applyAiBtn').onclick = async () => {
+            const promptInput = document.getElementById('aiPrompt');
+            if (!promptInput.value.trim()) return;
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = sourceImage.naturalWidth; tempCanvas.height = sourceImage.naturalHeight;
+            tempCanvas.getContext('2d').drawImage(sourceImage, 0, 0);
+            const base64Data = tempCanvas.toDataURL('image/png').split(',')[1];
+            
+            document.getElementById('aiLoading').classList.remove('hidden');
+            document.getElementById('aiBtnText').innerText = 'Génération en cours...';
+            document.getElementById('applyAiBtn').disabled = true;
+            document.getElementById('applyAiBtn').classList.add('opacity-75');
+            document.getElementById('aiError').classList.add('hidden');
+
+            try {
+                const newImageBase64 = await callGeminiAPIWithRetry(promptInput.value, base64Data);
+                
+                // SAUVEGARDE STRICTE DES COUPS DE PINCEAU BLANCS AVANT LA MISE A JOUR DE L'IMAGE IA
+                const backupCanvas = document.createElement('canvas');
+                backupCanvas.width = drawingLayer.width; backupCanvas.height = drawingLayer.height;
+                backupCanvas.getContext('2d').drawImage(drawingLayer, 0, 0);
+                
+                sourceImage.onload = function() {
+                    syncDrawingLayer();
+                    // RESTAURATION PARFAITE DES COUPS DE PINCEAU PAR DESSUS L'IMAGE IA
+                    dCtx.drawImage(backupCanvas, 0, 0, backupCanvas.width, backupCanvas.height, 0, 0, drawingLayer.width, drawingLayer.height);
+                };
+                sourceImage.src = newImageBase64; 
+                promptInput.value = '';
+            } catch (error) {
+                document.getElementById('aiError').innerText = "Erreur de communication avec l'IA. Veuillez réessayer.";
+                document.getElementById('aiError').classList.remove('hidden');
+            } finally {
+                document.getElementById('aiLoading').classList.add('hidden');
+                document.getElementById('aiBtnText').innerText = 'Appliquer l\'IA';
+                document.getElementById('applyAiBtn').disabled = false;
+                document.getElementById('applyAiBtn').classList.remove('opacity-75');
+            }
+        };
+
+        // --- EXPORTATION ---
+        downloadBtn.onclick = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = sourceImage.naturalWidth; canvas.height = sourceImage.naturalHeight;
+            
+            ctx.drawImage(sourceImage, 0, 0);
+
+            const displayRect = sourceImage.getBoundingClientRect();
+            const scaleX = canvas.width / displayRect.width;
+            const scaleY = canvas.height / displayRect.height;
+            
+            const drawElements = (selector) => {
+                document.querySelectorAll(selector).forEach(el => {
+                    const cssLeft = el.offsetLeft; const cssTop = el.offsetTop;
+                    const cssWidth = el.offsetWidth; const cssHeight = el.offsetHeight;
+                    
+                    const canvasLeft = cssLeft * scaleX; const canvasTop = cssTop * scaleY;
+                    const canvasWidth = cssWidth * scaleX; const canvasHeight = cssHeight * scaleY;
+                    const rotation = parseInt(el.dataset.rotation || 0);
+
+                    ctx.save();
+                    // On se translate à l'origine exacte (en haut à gauche) pour la rotation
+                    ctx.translate(canvasLeft, canvasTop);
+                    ctx.rotate(rotation * Math.PI / 180);
+                    
+                    if (el.classList.contains('mask')) {
+                        if (el.dataset.shape === 'image') {
+                            const img = el.querySelector('img');
+                            ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+                        } else if (el.dataset.shape === 'circle') {
+                            ctx.fillStyle = '#FFFFFF'; ctx.beginPath();
+                            ctx.ellipse(canvasWidth/2, canvasHeight/2, canvasWidth/2, canvasHeight/2, 0, 0, 2*Math.PI); ctx.fill();
+                        } else {
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                        }
+                    } else if (el.classList.contains('label-item')) {
+                        const span = el.querySelector('.text-content');
+                        const fontSizePx = parseFloat(window.getComputedStyle(span).fontSize) * scaleX;
+                        ctx.fillStyle = '#000000';
+                        ctx.font = `bold ${fontSizePx}px Arial, sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(span.innerText, canvasWidth/2, canvasHeight/2);
+                    }
+                    ctx.restore();
+                });
+            };
+
+            drawElements('.mask:not(.arrow-container)');
+            ctx.drawImage(drawingLayer, 0, 0, canvas.width, canvas.height);
+            drawElements('.mask.arrow-container, .label-item');
+
+            const link = document.createElement('a');
+            link.download = 'Image_Editee.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        };
+    </script>
+</body>
+</html>
