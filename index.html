@@ -149,10 +149,11 @@
 <body class="bg-slate-50 min-h-screen p-4 md:p-8">
 
     <div class="max-w-5xl mx-auto">
+        <!-- BLOC 1 : PARTIE ÉDITEUR (Titre, Boutons et Outils) -->
         <div class="bg-white rounded-xl shadow-md p-6 mb-6">
             <h1 class="text-2xl font-bold text-slate-800 mb-2">Éditeur et Simplificateur d'Image</h1>
             <p class="text-slate-600 mb-4">
-                Chargez une image vierge. Vous pouvez dessiner des caches blancs, effacer vos erreurs, ajouter du texte, des lignes/flèches et utiliser l'IA de manière professionnelle.
+                Chargez une image vierge. Vous pouvez dessiner des caches blancs, effacer vos erreurs, ajouter du texte, des lignes/flèches, puis générer une requête IA professionnelle pour les finitions.
             </p>
             
             <div class="flex flex-wrap gap-4 items-center mb-4 border-b pb-4">
@@ -167,7 +168,7 @@
                 </button>
             </div>
             
-            <div id="tools-container" class="mb-4 border-b pb-4 hidden">
+            <div id="tools-container" class="mb-4 hidden">
                 <div class="flex flex-wrap gap-3 mb-3">
                     <button id="addRectBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-medium py-1 px-3 rounded text-sm">+ Cache Carré</button>
                     <button id="addCircleBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-medium py-1 px-3 rounded text-sm">+ Cache Rond</button>
@@ -193,32 +194,76 @@
                     </button>
                 </div>
             </div>
-
-            <div id="ai-container" class="mb-4 border-b pb-4 hidden">
-                <h3 class="text-lg font-bold text-slate-800 mb-2">✨ Assistant IA - Corrections Chirurgicales (Inpainting Strict)</h3>
-                <p class="text-sm text-slate-600 mb-2">L'IA est configurée avec des verrous de sécurité. Elle effacera <strong>strictement et uniquement</strong> ce que vous demandez. Le reste de l'image (lignes, textures) et vos coups de pinceau resteront 100% intacts.</p>
-                <div class="flex flex-wrap gap-2">
-                    <input type="text" id="aiPrompt" placeholder="Ex: Efface la pointe de la flèche qui passe en avant plan de l'image..." class="flex-1 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
-                    <button id="applyAiBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded text-sm flex items-center transition-all">
-                        <span id="aiBtnText">Appliquer l'IA</span>
-                        <svg id="aiLoading" class="animate-spin ml-2 h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    </button>
-                </div>
-                <p id="aiError" class="text-red-500 text-xs mt-1 hidden"></p>
-            </div>
             
             <p class="text-sm text-slate-500 mb-2 italic">
                 Rappel : Les cadres autour des flèches disparaissent complètement dès que votre souris s'éloigne. Le résultat visuel sera parfait !
             </p>
         </div>
 
-        <div id="workspace-wrapper" class="overflow-auto text-center hidden">
+        <!-- BLOC 2 : L'IMAGE CHARGÉE (Directement sous l'éditeur) -->
+        <div id="workspace-wrapper" class="overflow-auto text-center hidden mb-6">
             <div id="workspace-container">
                 <img id="source-image" src="" alt="Image source">
                 <canvas id="drawing-layer"></canvas>
                 <canvas id="temp-layer"></canvas>
             </div>
         </div>
+
+        <!-- BLOC 3 : ASSISTANT IA (Générateur de Requête, en dessous de l'image) -->
+        <div id="ai-container" class="bg-white rounded-xl shadow-md p-6 mb-6 hidden">
+            <h3 class="text-xl font-bold text-slate-800 mb-2">✨ Assistant IA - Générateur de Requête Experte</h3>
+            <p class="text-sm text-slate-600 mb-4 border-l-4 border-indigo-500 pl-3 py-1 bg-indigo-50">
+                <strong>Processus :</strong> 1. Modifiez votre image avec les outils au-dessus et téléchargez-la. <br/>
+                2. Remplissez le formulaire ci-dessous pour générer une "Requête Parfaite". <br/>
+                3. Ouvrez l'IA de votre choix (ex: Gemini), déposez-y votre image modifiée et collez la requête. Le résultat sera chirurgical !
+            </p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">🧹 Élément(s) à EFFACER :</label>
+                    <input type="text" id="aiErase" placeholder="Ex: la lampe rose dans le coin..." class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 shadow-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">➕ Élément(s) à AJOUTER :</label>
+                    <input type="text" id="aiAdd" placeholder="Ex: 4 chauves-souris qui volent, un coffre sur le tapis..." class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 shadow-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">🔄 Élément(s) à TRANSFORMER :</label>
+                    <input type="text" id="aiTransform" placeholder="Ex: Change la couleur de la porte rouge pour une porte bleue..." class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 shadow-sm">
+                </div>
+                <div class="flex flex-col justify-end pb-1">
+                    <label class="block text-sm font-bold text-slate-700 mb-1">🎨 Style de l'image désirée :</label>
+                    <select id="aiStyle" class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 shadow-sm">
+                        <option value="identique">Garder strictement le style actuel de l'image</option>
+                        <option value="realiste">Photoréaliste / Manuel d'édition Haute Qualité</option>
+                        <option value="cartoon">Cartoon / Bande dessinée professionnelle</option>
+                        <option value="illustration">Illustration scientifique / Schéma technique</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2 mt-2 flex items-center bg-indigo-100 p-3 rounded border border-indigo-200">
+                    <input type="checkbox" id="aiGif" class="mr-3 h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer">
+                    <label for="aiGif" class="text-sm font-bold text-indigo-900 cursor-pointer">
+                        🚀 Format animé / GIF : Forcer l'IA à adopter un style de dessin vectoriel vibrant, typique des GIF animés professionnels.
+                    </label>
+                </div>
+            </div>
+
+            <button id="generatePromptBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded text-sm transition-all shadow-md w-full md:w-auto mb-4">
+                ⚙️ Générer la requête parfaite
+            </button>
+
+            <div id="promptOutputContainer" class="hidden animate-fade-in">
+                <label class="block text-sm font-bold text-slate-700 mb-1">📋 Voici votre requête experte (à copier-coller) :</label>
+                <div class="relative">
+                    <textarea id="promptOutput" readonly class="w-full h-48 border-2 border-indigo-400 bg-white rounded-lg p-4 text-sm text-slate-800 font-mono resize-none shadow-inner focus:outline-none"></textarea>
+                    <button id="copyPromptBtn" class="absolute top-3 right-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs py-2 px-4 rounded shadow transition-all">
+                        Copier le texte
+                    </button>
+                </div>
+                <p id="copySuccess" class="text-emerald-600 text-sm mt-2 hidden font-bold">✓ Requête copiée dans le presse-papier !</p>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -350,6 +395,7 @@
 
             function dragMouseDown(e) {
                 if (e.target.closest('.element-controls') || e.target.closest('.rotate-handle') || e.target.closest('.custom-resize-handle')) return;
+                // Pour le texte, drag possible uniquement via la poignée
                 if (!isMask && !e.target.closest('.text-drag-handle')) return;
 
                 if (isMask) {
@@ -377,7 +423,7 @@
             function closeDragElement() { document.onmouseup = null; document.onmousemove = null; }
         }
 
-        // --- CONTRÔLES (SUPPRIMER, ÉPAISSEUR) ---
+        // --- CONTRÔLES (SUPPRIMER, ÉPAISSEUR, COULEUR, POLICE) ---
         function createControls(el, type) {
             const controls = document.createElement('div');
             controls.className = 'element-controls';
@@ -393,7 +439,24 @@
                 const btnMinus = document.createElement('div'); btnMinus.className = 'control-btn bg-slate-600'; btnMinus.innerText = 'Taille -';
                 btnPlus.onmousedown = (e) => { e.stopPropagation(); const span = el.querySelector('.text-content'); span.style.fontSize = (parseInt(span.style.fontSize) + 4) + 'px'; };
                 btnMinus.onmousedown = (e) => { e.stopPropagation(); const span = el.querySelector('.text-content'); span.style.fontSize = Math.max(10, parseInt(span.style.fontSize) - 4) + 'px'; };
-                controls.append(btnPlus, btnMinus);
+                
+                const colorInput = document.createElement('input');
+                colorInput.type = 'color'; colorInput.value = '#000000';
+                colorInput.className = 'control-btn cursor-pointer'; 
+                colorInput.style.padding = '0'; colorInput.style.width = '24px'; colorInput.style.height = '24px';
+                colorInput.title = 'Couleur du texte';
+                colorInput.onmousedown = (e) => e.stopPropagation();
+                colorInput.oninput = (e) => { const span = el.querySelector('.text-content'); if(span) span.style.color = e.target.value; };
+
+                const fontSelect = document.createElement('select');
+                fontSelect.className = 'control-btn bg-white text-slate-800 border border-slate-300';
+                fontSelect.style.padding = '0 4px'; fontSelect.title = 'Police du texte';
+                const fonts = ['Arial', 'Verdana', 'Courier New', 'Georgia', 'Times New Roman', 'Comic Sans MS', 'Impact'];
+                fonts.forEach(f => { const opt = document.createElement('option'); opt.value = f; opt.innerText = f; fontSelect.appendChild(opt); });
+                fontSelect.onmousedown = (e) => e.stopPropagation();
+                fontSelect.onchange = (e) => { const span = el.querySelector('.text-content'); if(span) span.style.fontFamily = e.target.value; };
+
+                controls.append(btnPlus, btnMinus, colorInput, fontSelect);
             }
 
             if (type === 'arrow') {
@@ -586,72 +649,75 @@
         };
         tempLayer.onmouseleave = tempLayer.onmouseup;
 
-        // --- ASSISTANT IA (AVEC CONSIGNES D'INPAINTING ULTRA-STRICTES) ---
-        async function callGeminiAPIWithRetry(userPrompt, base64Data) {
-            const apiKey = ""; 
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
-            
-            // CONSIGNES STRICTES INTÉGRÉES AU PROMPT SYSTÈME DE L'IA POUR GARANTIR UNE PRÉCISION CHIRURGICALE
-            const structuredPrompt = `INSTRUCTION D'ÉDITION CHIRURGICALE (INPAINTING) :
-RÈGLE ABSOLUE NUMÉRO 1 : NE MODIFIE AUCUN PIXEL DE L'IMAGE en dehors de l'élément explicitement demandé. TOUT LE RESTE (textes, lignes, grain du bois, flèches, fond blanc) DOIT RESTER STRICTEMENT IDENTIQUE, SANS AUCUNE ALTÉRATION, RECOLORATION NI LISSAGE.
+        // --- NOUVEAU GÉNÉRATEUR DE REQUÊTE IA (HORS-LIGNE) ---
+        const generatePromptBtn = document.getElementById('generatePromptBtn');
+        const promptOutputContainer = document.getElementById('promptOutputContainer');
+        const promptOutput = document.getElementById('promptOutput');
+        const copyPromptBtn = document.getElementById('copyPromptBtn');
+        const copySuccess = document.getElementById('copySuccess');
 
-Tâche : Efface UNIQUEMENT cet élément précis : "${userPrompt}".
-Remplace-le par la continuité naturelle du fond situé juste derrière lui. L'image de retour doit être un clone exact de l'image source, avec pour SEULE différence la suppression chirurgicale de l'élément demandé.`;
+        generatePromptBtn.onclick = () => {
+            const erase = document.getElementById('aiErase').value.trim();
+            const add = document.getElementById('aiAdd').value.trim();
+            const transform = document.getElementById('aiTransform').value.trim();
+            const style = document.getElementById('aiStyle').value;
+            const isGif = document.getElementById('aiGif').checked;
 
-            const payload = {
-                contents: [{ parts: [{ text: structuredPrompt }, { inlineData: { mimeType: "image/png", data: base64Data } }] }],
-                generationConfig: { responseModalities: ["IMAGE"] }
-            };
-            
-            for (let i = 0; i < 4; i++) {
-                try {
-                    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    if (!response.ok) throw new Error('API Error');
-                    const result = await response.json();
-                    return `data:image/png;base64,${result.candidates[0].content.parts.find(p => p.inlineData).inlineData.data}`;
-                } catch (error) { if (i === 3) throw error; await new Promise(r => setTimeout(r, [1000, 2000, 4000][i])); }
+            if (!erase && !add && !transform) {
+                alert("Veuillez remplir au moins un champ (Effacer, Ajouter ou Transformer) pour générer la requête.");
+                return;
             }
-        }
 
-        document.getElementById('applyAiBtn').onclick = async () => {
-            const promptInput = document.getElementById('aiPrompt');
-            if (!promptInput.value.trim()) return;
-            
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = sourceImage.naturalWidth; tempCanvas.height = sourceImage.naturalHeight;
-            tempCanvas.getContext('2d').drawImage(sourceImage, 0, 0);
-            const base64Data = tempCanvas.toDataURL('image/png').split(',')[1];
-            
-            document.getElementById('aiLoading').classList.remove('hidden');
-            document.getElementById('aiBtnText').innerText = 'Génération en cours...';
-            document.getElementById('applyAiBtn').disabled = true;
-            document.getElementById('applyAiBtn').classList.add('opacity-75');
-            document.getElementById('aiError').classList.add('hidden');
+            // Construction de la requête experte pour un développeur/éditeur
+            let prompt = `INSTRUCTION SYSTÈME STRICTE D'ÉDITION D'IMAGE (INPAINTING & GÉNÉRATION PROFESSIONNELLE) :
+Tu es un développeur expert en génération d'images par IA et un infographiste professionnel travaillant pour une maison d'édition scolaire de très haute qualité. Ta tâche est de traiter l'image que je te fournis avec une précision CHIRURGICALE selon mon cahier des charges.
 
-            try {
-                const newImageBase64 = await callGeminiAPIWithRetry(promptInput.value, base64Data);
-                
-                // SAUVEGARDE STRICTE DES COUPS DE PINCEAU BLANCS AVANT LA MISE A JOUR DE L'IMAGE IA
-                const backupCanvas = document.createElement('canvas');
-                backupCanvas.width = drawingLayer.width; backupCanvas.height = drawingLayer.height;
-                backupCanvas.getContext('2d').drawImage(drawingLayer, 0, 0);
-                
-                sourceImage.onload = function() {
-                    syncDrawingLayer();
-                    // RESTAURATION PARFAITE DES COUPS DE PINCEAU PAR DESSUS L'IMAGE IA
-                    dCtx.drawImage(backupCanvas, 0, 0, backupCanvas.width, backupCanvas.height, 0, 0, drawingLayer.width, drawingLayer.height);
-                };
-                sourceImage.src = newImageBase64; 
-                promptInput.value = '';
-            } catch (error) {
-                document.getElementById('aiError').innerText = "Erreur de communication avec l'IA. Veuillez réessayer.";
-                document.getElementById('aiError').classList.remove('hidden');
-            } finally {
-                document.getElementById('aiLoading').classList.add('hidden');
-                document.getElementById('aiBtnText').innerText = 'Appliquer l\'IA';
-                document.getElementById('applyAiBtn').disabled = false;
-                document.getElementById('applyAiBtn').classList.remove('opacity-75');
+RÈGLE D'OR ABSOLUE : Sauf indication contraire pour une transformation, tu ne dois SOUS AUCUN PRÉTEXTE modifier, altérer, lisser ou redessiner les éléments de l'image qui ne sont pas explicitement ciblés. Les textes, lignes, structures, le grain et le fond existant DOIVENT rester 100% IDENTIQUES au pixel près.\n\n`;
+
+            if (erase) {
+                prompt += `🧹 TÂCHE 1 - EFFACEMENT CHIRURGICAL :\nEfface STRICTEMENT les éléments suivants : "${erase}". Remplis la zone effacée par la continuité parfaite et naturelle du fond et de la texture situés juste derrière, sans laisser aucune trace de montage (inpainting strict).\n\n`;
             }
+
+            if (add) {
+                prompt += `➕ TÂCHE 2 - INTÉGRATION ET AJOUT :\nAjoute les éléments suivants de manière logique et cohérente avec la perspective : "${add}". Les éléments ajoutés ne doivent pas masquer les détails ou les textes vitaux de l'image.\n\n`;
+            }
+
+            if (transform) {
+                prompt += `🔄 TÂCHE 3 - TRANSFORMATION CIBLÉE :\nApplique la modification suivante uniquement sur l'élément ciblé : "${transform}".\n\n`;
+            }
+
+            // Gestion du style
+            let styleDesc = "";
+            if (style === "realiste") styleDesc = "Photoréalisme, textures de haute définition, éclairage naturel et cohérent avec la scène globale.";
+            else if (style === "cartoon") styleDesc = "Style cartoon professionnel, contours nets, couleurs vibrantes, flat design digne d'une bande dessinée haut de gamme.";
+            else if (style === "illustration") styleDesc = "Style illustration scientifique ou schéma technique, traits d'une clarté absolue, rigueur géométrique et propreté clinique.";
+            else styleDesc = "Reproduire et conserver EXACTEMENT le style artistique, le grain et la palette de couleurs de l'image d'origine pour que la modification soit indétectable.";
+
+            if (isGif) {
+                prompt += `🎨 DIRECTIVE DE STYLE SPÉCIALE (ANIMATION GIF / INTERACTIF) :
+Génère les modifications et ajouts sous forme de "Dessin vectoriel vibrant" (Vector art, flat design, bold colors) préparé pour être intégré comme frame d'une animation GIF de haute qualité. L'image finale doit être dynamique, propre et sans artefacts.\n\n`;
+            } else {
+                prompt += `🎨 DIRECTIVE DE STYLE D'INTÉGRATION :
+Les ajouts et modifications doivent respecter ce cahier des charges stylistique : ${styleDesc}\n\n`;
+            }
+
+            prompt += `RENDU FINAL ATTENDU : Fournis l'image finale d'une qualité exceptionnelle (résolution 4k, prête pour publication professionnelle). N'ajoute pas de texte explicatif dans l'image sauf si expressément demandé ci-dessus.`;
+
+            // Affichage
+            promptOutput.value = prompt;
+            promptOutputContainer.classList.remove('hidden');
+            
+            // Animation scroll pour bien voir le résultat
+            promptOutputContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        };
+
+        copyPromptBtn.onclick = () => {
+            promptOutput.select();
+            document.execCommand('copy');
+            copySuccess.classList.remove('hidden');
+            setTimeout(() => {
+                copySuccess.classList.add('hidden');
+            }, 3000);
         };
 
         // --- EXPORTATION ---
@@ -693,9 +759,10 @@ Remplace-le par la continuité naturelle du fond situé juste derrière lui. L'i
                         }
                     } else if (el.classList.contains('label-item')) {
                         const span = el.querySelector('.text-content');
-                        const fontSizePx = parseFloat(window.getComputedStyle(span).fontSize) * scaleX;
-                        ctx.fillStyle = '#000000';
-                        ctx.font = `bold ${fontSizePx}px Arial, sans-serif`;
+                        const computedStyle = window.getComputedStyle(span);
+                        const fontSizePx = parseFloat(computedStyle.fontSize) * scaleX;
+                        ctx.fillStyle = computedStyle.color;
+                        ctx.font = `bold ${fontSizePx}px ${computedStyle.fontFamily}`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText(span.innerText, canvasWidth/2, canvasHeight/2);
